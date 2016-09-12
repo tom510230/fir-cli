@@ -8,7 +8,7 @@ module FIR
       set_flavor(options)
 
       Dir.chdir(@build_dir)
-      @build_cmd = initialize_apk_build_cmd
+      @build_cmd = initialize_apk_build_cmd(args)
 
       logger_info_and_run_build_command
 
@@ -29,12 +29,18 @@ module FIR
       end
     end
 
-    def initialize_apk_build_cmd
+    def initialize_apk_build_cmd(args)
       check_build_gradle_exist
 
       cmd = "./gradlew build"
       cmd = "./gradlew #{@flavor}" unless @flavor.blank?
+      cmd += " #{apk_custom_settings(args)} "
       cmd
+    end
+
+    def apk_custom_settings(args)
+      setting_str =  args[0]
+      setting_str
     end
 
     def gradle_build_path
