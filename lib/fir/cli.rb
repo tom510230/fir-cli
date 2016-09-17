@@ -40,6 +40,7 @@ module FIR
     method_option :qrcode,        type: :boolean, aliases: '-Q', desc: 'Generate qrcode'
     method_option :mapping,       type: :boolean, aliases: '-M', desc: 'true/false if upload app mapping file to BugHD.com'
     method_option :proj,          type: :string,  aliases: '-P', desc: 'Project id in BugHD.com if upload app mapping file'
+    method_option :archivepath,   type: :string,  aliases: '-a', desc: 'true/false if choose to exportarchive'
     method_option :open,          type: :boolean, desc: 'true/false if open for everyone'
     method_option :password,      type: :string,  desc: 'Set password for app'
     def build_ipa(*args)

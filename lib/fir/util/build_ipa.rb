@@ -8,7 +8,7 @@ module FIR
 
       @build_tmp_dir = Dir.mktmpdir
       @build_cmd     = initialize_ipa_build_cmd(args, options)
-
+      puts("#{@build_cmd}") if $DEBUG
       logger_info_and_run_build_command
 
       output_ipa_and_dsym
@@ -26,13 +26,18 @@ module FIR
       @scheme_name   = options[:scheme]
       @profile_name  = options[:profile]
       @destination   = options[:destination]
+      @archivepath   = options[:archivepath]
+      @appname       = options[:name]
 
       build_cmd =  'xcodebuild build -sdk iphoneos'
+      build_cmd =  "xcodebuild archive -sdk iphoneos -archivePath '#{@output_path}/#{@appname}.xcarchive'" unless @archivepath.blank?
       build_cmd += initialize_xcode_build_path(options)
       build_cmd += " -configuration '#{@configuration}'" unless @configuration.blank?
       build_cmd += " -target '#{@target_name}'" unless @target_name.blank?
       build_cmd += " -destination '#{@destination}'" unless @destination.blank?
-      build_cmd += " -exportProvisioningProfile '#{@profile_name}'" unless @profile_name.blank?
+      if @archivepath.blank? then
+        build_cmd += " -exportProvisioningProfile '#{@profile_name}'" unless @profile_name.blank?
+      end
       build_cmd += " #{ipa_custom_settings(args)} 2>&1"
       build_cmd
     end
@@ -41,23 +46,35 @@ module FIR
       custom_settings = split_assignment_array_to_hash(args)
 
       setting_str =  convert_hash_to_assignment_string(custom_settings)
-      setting_str += " TARGET_BUILD_DIR='#{@build_tmp_dir}'" unless custom_settings['TARGET_BUILD_DIR']
-      setting_str += " CONFIGURATION_BUILD_DIR='#{@build_tmp_dir}'" unless custom_settings['CONFIGURATION_BUILD_DIR']
+      if @archivepath.blank? then
+        setting_str += " TARGET_BUILD_DIR='#{@build_tmp_dir}'" unless custom_settings['TARGET_BUILD_DIR']
+        setting_str += " CONFIGURATION_BUILD_DIR='#{@build_tmp_dir}'" unless custom_settings['CONFIGURATION_BUILD_DIR']
+      end
       setting_str += " DWARF_DSYM_FOLDER_PATH='#{@output_path}'" unless custom_settings['DWARF_DSYM_FOLDER_PATH']
       setting_str
     end
 
     def output_ipa_and_dsym
-      apps = Dir["#{@build_tmp_dir}/*.app"].sort_by(&:size)
-      check_no_output_app(apps)
+      if @archivepath.blank? then
+        apps = Dir["#{@build_tmp_dir}/*.app"].sort_by(&:size)
+        check_no_output_app(apps)
 
-      @temp_ipa = "#{@build_tmp_dir}/#{Time.now.to_i}.ipa"
-      archive_ipa(apps)
+        @temp_ipa = "#{@build_tmp_dir}/#{Time.now.to_i}.ipa"
+        archive_ipa(apps)
 
-      check_archived_ipa_is_exist
-      rename_ipa_and_dsym
+        check_archived_ipa_is_exist
+        rename_ipa_and_dsym
 
-      FileUtils.rm_rf(@build_tmp_dir) unless $DEBUG
+        FileUtils.rm_rf(@build_tmp_dir) unless $DEBUG
+      else
+        check_no_output_xcarchive
+        export_archive
+
+        check_archived_ipa_is_exist
+        rename_ipa_and_dsym
+
+        FileUtils.rm_rf("#{@output_path}/#{@appname}.xcarchive") unless $DEBUG
+      end
 
       logger.info 'Build Success'
     end
@@ -69,6 +86,17 @@ module FIR
       @xcrun_cmd = "xcrun -sdk iphoneos PackageApplication -v #{apps.join(' ')} -o #{@temp_ipa}"
       puts @xcrun_cmd if $DEBUG
       logger.info `#{@xcrun_cmd}`
+    end
+
+    def export_archive
+      logger.info 'Archiving......'
+      logger_info_dividing_line
+
+      @temp_ipa = "#{@output_path}/#{Time.now.to_i}.ipa"
+
+      @archive_cmd = "xcodebuild -exportArchive -exportFormat IPA -exportProvisioningProfile '#{@profile_name}' -archivePath '#{@output_path}/#{@appname}.xcarchive' -exportPath '#{@temp_ipa}'"
+      puts @archive_cmd if $DEBUG
+      logger.info `#{@archive_cmd}`
     end
 
     def check_archived_ipa_is_exist
@@ -152,6 +180,13 @@ module FIR
     def check_no_output_app(apps)
       if apps.length == 0
         logger.error 'Builded has no output app, Can not be packaged'
+        exit 1
+      end
+    end
+
+    def check_no_output_xcarchive
+      unless File.exist?("#{@output_path}/#{@appname}.xcarchive")
+        logger.error 'Builded has no output xcarchive, Can not be packaged'
         exit 1
       end
     end
